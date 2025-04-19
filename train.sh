@@ -16,7 +16,7 @@ python train.py \
     --no_flip \
     --load_size 345 \
     --crop_size 345 \
-    --batch_size 4 \
+    --batch_size 2 \
     --n_epochs 100 \
     --n_epochs_decay 100 \
     --display_id -1 \
