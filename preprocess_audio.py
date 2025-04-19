@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
     # Save normalization stats
     norm_stats = {
-        'global_max_abs_val': global_max,
+        'global_max_abs_val': float(global_max),
         'sr': args.sr,
         'n_fft': args.n_fft,
         'hop_length': args.hop_length,
