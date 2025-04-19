@@ -23,9 +23,9 @@ class HardcodedOptions:
     name = 'bass_cyclegan_experiment' # Name of the experiment (used for checkpoint loading)
     model = 'cycle_gan'             # Model type
     epoch = 'latest'                # Epoch to load ('latest' or specific number)
+    load_iter = 0                   # <<<--- ADD THIS LINE (Load by iteration number, 0 means use epoch)
     netG = 'resnet_9blocks'         # Generator architecture (confirm if different from default)
-    # Add netD if specific Discriminator needed by create_model, but usually defaults are ok for testing G
-    # netD = 'basic'
+    netD = 'basic'                  # Discriminator type (e.g., 'basic', 'n_layers')
 
     # --- Data/Preprocessing ---
     input_nc = 2                    # Input channels (Real, Imag)
