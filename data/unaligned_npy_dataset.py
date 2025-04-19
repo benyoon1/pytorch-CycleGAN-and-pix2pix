@@ -1,9 +1,10 @@
 import os.path
 import numpy as np
 import torch
-from data.base_dataset import BaseDataset, get_transform
-from data.image_folder import make_dataset
+from data.base_dataset import BaseDataset # Removed get_transform as it's unused here
+# from data.image_folder import make_dataset # No longer using this
 import random
+import glob # <-- Add this import
 
 
 class UnalignedNpyDataset(BaseDataset):
@@ -34,10 +35,26 @@ class UnalignedNpyDataset(BaseDataset):
         if not os.path.exists(self.dir_B):
              raise FileNotFoundError(f"Dataset directory not found: {self.dir_B}")
 
-        self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size, extensions=['.npy']))   # load images from '/path/to/data/trainA'
-        self.B_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size, extensions=['.npy']))   # load images from '/path/to/data/trainB'
+        # --- Modification Start ---
+        # Use glob to find all .npy files directly
+        self.A_paths = sorted(glob.glob(os.path.join(self.dir_A, '*.npy')))
+        self.B_paths = sorted(glob.glob(os.path.join(self.dir_B, '*.npy')))
+
+        # Apply max_dataset_size limit if specified
+        if opt.max_dataset_size != float('inf'):
+             self.A_paths = self.A_paths[:int(opt.max_dataset_size)] # Ensure index is integer
+             self.B_paths = self.B_paths[:int(opt.max_dataset_size)]
+        # --- Modification End ---
+
+
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
+
+        if self.A_size == 0:
+            print(f"Warning: Found 0 *.npy files in {self.dir_A}")
+        if self.B_size == 0:
+             print(f"Warning: Found 0 *.npy files in {self.dir_B}")
+
         print(f"Found {self.A_size} files for A and {self.B_size} files for B.")
 
         # No image transforms like color jitter, resize, or flip needed for preprocessed .npy
@@ -48,6 +65,7 @@ class UnalignedNpyDataset(BaseDataset):
         if input_nc != 2 or output_nc != 2:
             print(f"Warning: input_nc ({input_nc}) or output_nc ({output_nc}) is not 2. Ensure model config matches data.")
 
+    # __getitem__ and __len__ methods remain the same as before...
     def __getitem__(self, index):
         """Return a data point and its metadata information.
 
@@ -68,8 +86,17 @@ class UnalignedNpyDataset(BaseDataset):
         B_path = self.B_paths[index_B]
 
         # Load .npy files
-        A_npy = np.load(A_path)
-        B_npy = np.load(B_path)
+        try:
+             A_npy = np.load(A_path)
+             B_npy = np.load(B_path)
+        except Exception as e:
+             print(f"Error loading .npy file:")
+             print(f"  A_path: {A_path}")
+             print(f"  B_path: {B_path}")
+             print(f"  Error: {e}")
+             # Return dummy data or raise error? For now, let's raise it.
+             raise e
+
 
         # Convert to PyTorch tensors
         # Input shape should be [C, H, W] = [2, Freq, Time]
@@ -77,8 +104,13 @@ class UnalignedNpyDataset(BaseDataset):
         B = torch.from_numpy(B_npy).float()
 
         # Ensure they have the correct shape (C=2)
-        assert A.shape[0] == 2, f"Tensor A from {A_path} has shape {A.shape}, expected C=2"
-        assert B.shape[0] == 2, f"Tensor B from {B_path} has shape {B.shape}, expected C=2"
+        if A.shape[0] != 2:
+             raise ValueError(f"Tensor A from {A_path} has shape {A.shape}, expected C=2")
+        if B.shape[0] != 2:
+            raise ValueError(f"Tensor B from {B_path} has shape {B.shape}, expected C=2")
+        #assert A.shape[0] == 2, f"Tensor A from {A_path} has shape {A.shape}, expected C=2" # Use ValueError for clarity
+        #assert B.shape[0] == 2, f"Tensor B from {B_path} has shape {B.shape}, expected C=2" # Use ValueError for clarity
+
 
         return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
 
@@ -88,4 +120,11 @@ class UnalignedNpyDataset(BaseDataset):
         As we have two datasets with potentially different sizes,
         we take the maximum of the two sets.
         """
+        # Ensure we don't return 0 if one dataset is empty but we want unpaired items
+        if self.A_size == 0 or self.B_size == 0:
+             # If one is empty, the effective size for unaligned is 0 unless testing/single image mode
+             # However, CycleGAN needs samples from both. Let's warn earlier.
+             # For training, return max might still be okay if user ignores warnings,
+             # but it will likely fail later. Returning max is consistent with original logic.
+             pass # Warning printed in __init__
         return max(self.A_size, self.B_size)
