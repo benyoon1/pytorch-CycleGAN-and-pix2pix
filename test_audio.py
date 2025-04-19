@@ -41,6 +41,7 @@ class HardcodedOptions:
     serial_batches = True           # Disable data shuffling
     display_id = -1                 # No visdom display
     verbose = False                 # Set to True for more model loading details if needed
+    isTrain = False
     # eval = True                   # Usually set by default in model.setup for test phase
 
     # --- Network Architecture Parameters (Add these & MATCH TRAINING) ---
