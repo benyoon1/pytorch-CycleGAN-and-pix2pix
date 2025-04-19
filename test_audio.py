@@ -43,13 +43,14 @@ class HardcodedOptions:
     verbose = False                 # Set to True for more model loading details if needed
     # eval = True                   # Usually set by default in model.setup for test phase
 
-    # --- Other parameters potentially needed by model creation (Defaults usually ok) ---
-    # ngf = 64
-    # ndf = 64
-    # norm = 'instance'
-    # init_type = 'normal'
-    # init_gain = 0.02
-    # no_dropout = True # Often set for CycleGAN ResNets
+    # --- Network Architecture Parameters (Add these & MATCH TRAINING) ---
+    ngf = 64                        # <<<--- ADD: Num Generator Filters
+    ndf = 64                        # <<<--- ADD: Num Discriminator Filters
+    norm = 'instance'               # <<<--- ADD: Normalization Type (instance, batch, none)
+    init_type = 'normal'            # <<<--- ADD: Weight Initialization Type
+    init_gain = 0.02                # <<<--- ADD: Initialization Gain
+    no_dropout = True               # <<<--- ADD: Dropout Setting (True for resnet_9blocks default)
+    n_layers_D = 3                  # <<<--- ADD: Num layers in PatchGAN discriminator if netD='n_layers' or 'pixel' (default is 3)
 
 # Create an object similar to what parsing would produce
 opt = HardcodedOptions()
