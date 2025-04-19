@@ -59,25 +59,39 @@ opt = HardcodedOptions()
 # --- load_model and process_audio_segment functions (Minor change in load_model print) ---
 
 def load_model(options): # Renamed argument for clarity
-    # No need to set num_threads, batch_size, etc. here, they are hardcoded in options
+    # --- GPU ID Processing ---
+    str_ids = options.gpu_ids.split(',')
+    options.gpu_ids = [] # Re-assign options.gpu_ids to be the list of ints
+    for str_id in str_ids:
+        id = int(str_id)
+        if id >= 0:
+            options.gpu_ids.append(id)
+
+    # Set device based on processed gpu_ids
+    if len(options.gpu_ids) > 0 and torch.cuda.is_available():
+        torch.cuda.set_device(options.gpu_ids[0])
+        print(f"Using GPU: {options.gpu_ids}")
+    else:
+        options.gpu_ids = [] # Ensure it's empty if using CPU
+        print("Using CPU.")
+    # --- End GPU ID Processing ---
 
     model = create_model(options)      # create a model given options
+    # The model's __init__ often uses opt.gpu_ids to set self.device
+    # And setup calls init_net which uses the list format correctly now
     model.setup(options)               # regular setup: load and print networks; create schedulers
 
     # Ensure model is in eval mode after setup
     model.eval()
 
     # Construct path for clarity (adjust based on actual checkpoint naming if needed)
-    # Check your checkpoints folder for exact naming convention (e.g., is it latest_net_G.pth or latest_net_G_A.pth?)
-    # Common names: latest_net_G.pth (if direction='AtoB'), latest_net_G_A.pth
     g_model_name = 'latest_net_G_A.pth' # Adjust if your model uses just G
     # Or determine based on direction:
     # g_model_name = f'{options.epoch}_net_G_{"A" if options.direction == "AtoB" else "B"}.pth'
 
     load_path = os.path.join(options.checkpoints_dir, options.name, g_model_name)
-    print(f"Attempting to load Generator model like: {load_path}") # More specific print
+    print(f"Attempting to load Generator model like: {load_path}")
 
-    # Check if the expected file exists
     if not os.path.exists(load_path):
         print(f"Warning: Checkpoint file not found at {load_path}. Trying generic 'latest_net_G.pth'")
         generic_load_path = os.path.join(options.checkpoints_dir, options.name, 'latest_net_G.pth')
