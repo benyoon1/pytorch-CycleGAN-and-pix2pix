@@ -5,10 +5,12 @@ import librosa
 import soundfile as sf
 from options.test_options import TestOptions
 from models import create_model
-from data.base_dataset import get_transform # We might not need this if preprocess is 'none'
+# from data.base_dataset import get_transform # Unused
 import json
 from tqdm import tqdm
+import argparse # <--- Make sure argparse is imported
 
+# --- load_model and process_audio_segment functions remain the same ---
 def load_model(opt):
     opt.num_threads = 0   # test code only supports num_threads = 0
     opt.batch_size = 1    # test code only supports batch_size = 1
@@ -17,15 +19,29 @@ def load_model(opt):
     opt.display_id = -1   # no visdom display; the test code saves the results to a HTML file.
 
     # Important: Ensure these match the data and training settings
+    # These should ideally be read from opt parsed by TestOptions if possible,
+    # but setting them directly works if consistent.
     opt.input_nc = 2
     opt.output_nc = 2
     opt.preprocess = 'none' # Match training
 
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
-    if opt.eval:
-        model.eval()
-    print(f"Model loaded from {opt.checkpoints_dir}/{opt.name}/latest_net_G_A.pth (or similar)")
+
+    # Ensure model is in eval mode after setup
+    model.eval()
+    # The previous check was `if opt.eval: model.eval()`.
+    # For testing, we almost always want eval mode.
+    # The `opt.eval` flag is typically used by the framework's standard test.py
+    # to potentially load slightly differently. Forcing eval() here is safe.
+
+    print(f"Model loaded from {opt.checkpoints_dir}/{opt.name}/{opt.epoch}_net_G_A.pth (or similar)")
+    # Constructing the path might be safer:
+    load_filename = f'{opt.epoch}_net_{opt.model}.pth' # Simplified, assumes model name matches file somewhat
+    # A more robust way might involve checking which G network exists (G_A or G_B) if direction matters
+    load_path = os.path.join(opt.checkpoints_dir, opt.name, load_filename)
+    # print(f"Attempting to load model from path like: {load_path}") # Debug print
+
     return model
 
 def process_audio_segment(segment_audio, model, opt, norm_stats):
@@ -38,8 +54,6 @@ def process_audio_segment(segment_audio, model, opt, norm_stats):
 
     # 1. STFT
     stft_result = librosa.stft(segment_audio, n_fft=n_fft, hop_length=hop_length, win_length=win_length)
-    # Get dimensions for potential padding/cropping if needed later
-    # n_freq_bins, n_time_frames = stft_result.shape
 
     # 2. Real/Imag Split
     real_part = np.real(stft_result)
@@ -52,115 +66,150 @@ def process_audio_segment(segment_audio, model, opt, norm_stats):
 
     # 4. Convert to PyTorch Tensor and add batch dimension
     input_tensor = torch.from_numpy(stft_tensor_normalized).float().unsqueeze(0) # Shape: [1, 2, F, T]
+    if opt.gpu_ids != "-1": # Move tensor to GPU if specified
+         input_tensor = input_tensor.to(model.device)
 
-    # Check if model requires specific size (if crop_size was used strictly during training)
-    # This is a basic check; more robust handling might be needed if sizes vary wildly
-    # target_time_frames = opt.crop_size # Assumes crop_size = time dimension
-    # if input_tensor.shape[3] != target_time_frames:
-    #    print(f"Warning: Input time frames {input_tensor.shape[3]} != target {target_time_frames}. Cropping/Padding might be needed.")
-       # Add cropping/padding logic here if necessary based on how training handled size mismatches
 
     # 5. Run Model (A->B)
-    model.set_input({'A': input_tensor, 'A_paths': ['dummy_path']}) # Provide dummy path
-    model.test() # Runs forward pass
+    # Ensure model is on correct device already (handled by model.setup)
+    # Make sure input data dictionary keys match what model expects
+    # The standard test.py uses 'real_A' and 'real_B', but CycleGANModel.set_input uses 'A' and 'B'.
+    # Let's stick to 'A' as used in the original script.
+    with torch.no_grad(): # Essential for inference to save memory and compute
+        model.set_input({'A': input_tensor, 'A_paths': ['dummy_path']})
+        model.forward() # Use forward() for inference, test() might do extra things
 
-    # Get output tensor (assuming we want G_A output)
-    # Check visualizer output or model code to confirm key (usually 'fake_B')
+    # 6. Get output tensor
     output_visuals = model.get_current_visuals()
-    if 'fake_B' not in output_visuals:
-        raise KeyError("Could not find 'fake_B' in model output visuals. Check model implementation/output keys.")
+    output_key = 'fake_B' # Assuming we want A->B conversion
+    if output_key not in output_visuals:
+         # Try the other direction key just in case? Or error out clearly.
+         available_keys = list(output_visuals.keys())
+         raise KeyError(f"Could not find '{output_key}' in model output visuals. Available keys: {available_keys}. Check model output.")
 
-    output_tensor = output_visuals['fake_B'].squeeze(0).cpu().detach().numpy() # Shape: [2, F, T]
+    output_tensor = output_visuals[output_key].squeeze(0).cpu().detach().numpy() # Shape: [2, F, T]
 
-    # 6. Denormalization
+    # 7. Denormalization
     output_tensor_denorm = output_tensor * global_max_abs_val
 
-    # 7. Complex Reconstruction
+    # 8. Complex Reconstruction
     complex_spec_out = output_tensor_denorm[0, :, :] + 1j * output_tensor_denorm[1, :, :]
 
-    # 8. Inverse STFT
-    # Use the original length of the segment for ISTFT to avoid artifacts from potential padding
-    # If the segment was padded before STFT, use the padded length. Here we assume exact segments.
+    # 9. Inverse STFT
     output_audio = librosa.istft(complex_spec_out, hop_length=hop_length, win_length=win_length, length=len(segment_audio))
 
     return output_audio
 
 
 if __name__ == '__main__':
-    opt = TestOptions().parse()  # get test options
+    # --- PARSING REVISED ---
+    # 1. Create the TestOptions parser BUT DON'T PARSE YET
+    test_opt_parser = TestOptions()
 
-    # --- Manual Settings specific to audio ---
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input_audio', required=True, help='Path to the input audio file (Domain A)')
-    parser.add_argument('--output_audio', required=True, help='Path to save the output audio file (Domain B sound)')
-    parser.add_argument('--norm_stats_path', required=True, help='Path to the norm_stats.json file created during preprocessing')
-    # Allow overriding options from command line for convenience
-    parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
-    parser.add_argument('--name', type=str, required=True, help='name of the experiment. It decides where to store samples and models')
-    parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
-    parser.add_argument('--model', type=str, default='cycle_gan', help='chooses which model to use.')
-    parser.add_argument('--epoch', type=str, default='latest', help='which epoch to load? set to latest to use latest cached model')
+    # 2. Create a separate parser for the custom audio arguments
+    audio_parser = argparse.ArgumentParser(description='Audio-specific arguments for CycleGAN testing')
+    audio_parser.add_argument('--input_audio', required=True, help='Path to the input audio file (Domain A)')
+    audio_parser.add_argument('--output_audio', required=True, help='Path to save the output audio file (Domain B sound)')
+    audio_parser.add_argument('--norm_stats_path', required=True, help='Path to the norm_stats.json file created during preprocessing')
+    # Add any other *custom* arguments here if needed in the future
 
-    # Parse known args from TestOptions and unknown args for our script
-    audio_args, unknown = parser.parse_known_args()
+    # 3. Parse ONLY the custom arguments first using parse_known_args
+    # This allows standard arguments like --name, --gpu_ids etc. to pass through
+    audio_args, remaining_args = audio_parser.parse_known_args()
 
-    # Update opt with args from our parser
-    opt.checkpoints_dir = audio_args.checkpoints_dir
-    opt.name = audio_args.name
-    opt.gpu_ids = audio_args.gpu_ids
-    opt.model = audio_args.model
-    opt.epoch = audio_args.epoch
-    # Add any other options you might need to override
+    # 4. Now, parse the *remaining* arguments (which should be the standard ones)
+    # using the TestOptions parser. Pass the parsed custom args namespace to modify it.
+    opt = test_opt_parser.parse_args(remaining_args)
 
-    # Load normalization stats
+    # `opt` now holds standard framework options
+    # `audio_args` holds the custom audio options
+
+    # --- END PARSING REVISED ---
+
+    # --- Load norm_stats using audio_args ---
     try:
         with open(audio_args.norm_stats_path, 'r') as f:
             norm_stats = json.load(f)
         print(f"Loaded normalization stats: {norm_stats}")
+    except FileNotFoundError:
+        print(f"Error: Normalization stats file not found at {audio_args.norm_stats_path}")
+        exit(1)
     except Exception as e:
         print(f"Error loading normalization stats from {audio_args.norm_stats_path}: {e}")
-        exit()
+        exit(1)
 
-    # Load the model
+    # --- Load the model using opt ---
+    # The load_model function sets necessary defaults in opt
     model = load_model(opt)
 
-    # Load input audio
-    print(f"Loading input audio: {audio_args.input_audio}")
-    y_in, sr_in = librosa.load(audio_args.input_audio, sr=norm_stats['sr'], mono=True)
-    print(f"Input audio loaded: {len(y_in)/norm_stats['sr']:.2f} seconds, Sample Rate: {norm_stats['sr']}")
+    # --- Load input audio using audio_args and norm_stats ---
+    try:
+        print(f"Loading input audio: {audio_args.input_audio}")
+        y_in, sr_in = librosa.load(audio_args.input_audio, sr=norm_stats['sr'], mono=True)
+        print(f"Input audio loaded: {len(y_in)/norm_stats['sr']:.2f} seconds, Sample Rate: {norm_stats['sr']}")
+        if sr_in != norm_stats['sr']:
+             print(f"Warning: Input audio sample rate {sr_in} differs from training rate {norm_stats['sr']}. Librosa handled resampling.")
+    except FileNotFoundError:
+         print(f"Error: Input audio file not found at {audio_args.input_audio}")
+         exit(1)
+    except Exception as e:
+         print(f"Error loading input audio {audio_args.input_audio}: {e}")
+         exit(1)
 
-    # --- Segmentation and Processing ---
+
+    # --- Segmentation and Processing using opt and norm_stats ---
     segment_len_sec = norm_stats['segment_len_sec']
     segment_len_samples = int(segment_len_sec * norm_stats['sr'])
-    hop_length = norm_stats['hop_length'] # Needed for overlap-add calculation
+    hop_length = norm_stats['hop_length']
 
     output_audio_full = np.array([], dtype=np.float32)
 
-    # Simple non-overlapping segmentation for now
-    num_segments = int(np.ceil(len(y_in) / segment_len_samples)) # Use ceil to process the last part
+    num_segments = int(np.ceil(len(y_in) / segment_len_samples))
     print(f"Processing audio in {num_segments} segments...")
+
+    # Check if GPU is available based on opt.gpu_ids
+    use_gpu = False
+    if opt.gpu_ids != '-1':
+        try:
+            gpu_list = [int(x) for x in opt.gpu_ids.split(',')]
+            if torch.cuda.is_available() and len(gpu_list) > 0:
+                use_gpu = True
+                # Assuming model is already moved to device in load_model/setup
+                print(f"Using GPU: {opt.gpu_ids}")
+            else:
+                print("GPU specified but not available or list empty. Using CPU.")
+        except ValueError:
+            print(f"Invalid gpu_ids format: {opt.gpu_ids}. Using CPU.")
+
 
     for i in tqdm(range(num_segments), desc="Generating Audio"):
         start_sample = i * segment_len_samples
         end_sample = start_sample + segment_len_samples
         segment = y_in[start_sample:end_sample]
 
-        # Pad the last segment if it's shorter
         if len(segment) < segment_len_samples:
              segment = np.pad(segment, (0, segment_len_samples - len(segment)), 'constant')
 
         # Process the segment
-        output_segment = process_audio_segment(segment, model, opt, norm_stats)
+        try:
+             output_segment = process_audio_segment(segment, model, opt, norm_stats)
+             output_audio_full = np.concatenate((output_audio_full, output_segment))
+        except Exception as e:
+             print(f"\nError processing segment {i}: {e}")
+             # Decide whether to skip segment or stop execution
+             print("Skipping segment.")
+             # Pad with silence of equivalent length if skipping
+             # output_audio_full = np.concatenate((output_audio_full, np.zeros_like(segment)))
 
-        # Append to the full output audio
-        # If using overlap-add later, this part would be different
-        output_audio_full = np.concatenate((output_audio_full, output_segment))
 
-    # Trim the output to the original input length (in case of padding in the last segment)
+    # Trim the output to the original input length
     output_audio_full = output_audio_full[:len(y_in)]
 
-    # Save the output audio
-    print(f"Saving output audio to: {audio_args.output_audio}")
-    sf.write(audio_args.output_audio, output_audio_full, norm_stats['sr'])
-
-    print("Inference complete.")
+    # --- Save the output audio using audio_args and norm_stats ---
+    try:
+        print(f"Saving output audio to: {audio_args.output_audio}")
+        sf.write(audio_args.output_audio, output_audio_full, norm_stats['sr'])
+        print("Inference complete.")
+    except Exception as e:
+        print(f"Error saving output audio to {audio_args.output_audio}: {e}")
+        exit(1)
