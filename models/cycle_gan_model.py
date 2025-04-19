@@ -3,6 +3,7 @@ import itertools
 from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
+import torch.nn.functional as F
 
 
 class CycleGANModel(BaseModel):
@@ -153,13 +154,23 @@ class CycleGANModel(BaseModel):
         lambda_idt = self.opt.lambda_identity
         lambda_A = self.opt.lambda_A
         lambda_B = self.opt.lambda_B
+
         # Identity loss
         if lambda_idt > 0:
             # G_A should be identity if real_B is fed: ||G_A(B) - B||
             self.idt_A = self.netG_A(self.real_B)
+            # --- Add Resize ---
+            target_size_B = self.real_B.shape[2:] # Get (H, W) from real_B
+            self.idt_A = F.interpolate(self.idt_A, size=target_size_B, mode='bilinear', align_corners=False)
+            # --- End Resize ---
             self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt
+
             # G_B should be identity if real_A is fed: ||G_B(A) - A||
             self.idt_B = self.netG_B(self.real_A)
+            # --- Add Resize ---
+            target_size_A = self.real_A.shape[2:] # Get (H, W) from real_A
+            self.idt_B = F.interpolate(self.idt_B, size=target_size_A, mode='bilinear', align_corners=False)
+            # --- End Resize ---
             self.loss_idt_B = self.criterionIdt(self.idt_B, self.real_A) * lambda_A * lambda_idt
         else:
             self.loss_idt_A = 0
@@ -167,12 +178,27 @@ class CycleGANModel(BaseModel):
 
         # GAN loss D_A(G_A(A))
         self.loss_G_A = self.criterionGAN(self.netD_A(self.fake_B), True)
-        # GAN loss D_B(G_B(B))
+        # GAN loss D_B(G_B(A))
         self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True)
+
         # Forward cycle loss || G_B(G_A(A)) - A||
+        self.rec_A = self.netG_B(self.fake_B)
+        # --- Add Resize ---
+        # Target size should match real_A, which was used to create fake_B initially
+        target_size_A = self.real_A.shape[2:] # Get (H, W) from real_A
+        self.rec_A = F.interpolate(self.rec_A, size=target_size_A, mode='bilinear', align_corners=False)
+        # --- End Resize ---
         self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
+
         # Backward cycle loss || G_A(G_B(B)) - B||
+        self.rec_B = self.netG_A(self.fake_A)
+        # --- Add Resize ---
+        # Target size should match real_B, which was used to create fake_A initially
+        target_size_B = self.real_B.shape[2:] # Get (H, W) from real_B
+        self.rec_B = F.interpolate(self.rec_B, size=target_size_B, mode='bilinear', align_corners=False)
+        # --- End Resize ---
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
+
         # combined loss and calculate gradients
         self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B
         self.loss_G.backward()
