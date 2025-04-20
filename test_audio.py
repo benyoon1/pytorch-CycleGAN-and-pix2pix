@@ -132,24 +132,24 @@ def process_audio_segment(segment_audio, model, options, norm_stats): # Renamed 
          input_tensor = input_tensor.to(model.device)
 
     # 5. Run Model (A->B)
-    # model.test() already includes torch.no_grad() internally
-
     # Directly set the required input attribute 'real_A' for A->B generation
     # Ensure the tensor is on the correct device first
     model.real_A = input_tensor.to(model.device) # Use model.device which was set during setup
 
-    # We don't need to set model.real_B for A->B inference.
-    # We also don't strictly need image_paths for inference itself.
-    model.test() # Call test() which internally calls forward() using model.real_A
+    # Directly call the generator G_A for A->B translation within no_grad context
+    with torch.no_grad():
+        # fake_B is the output we want
+        fake_B = model.netG_A(model.real_A)
 
-    # 6. Get output tensor
-    output_visuals = model.get_current_visuals()
-    output_key = 'fake_B' # For A->B translation
-    if output_key not in output_visuals:
-         available_keys = list(output_visuals.keys())
-         raise KeyError(f"Could not find '{output_key}' in model output visuals. Available keys: {available_keys}.")
+    # 6. Get output tensor (fake_B is already the tensor we need)
+    # output_visuals = model.get_current_visuals() # No longer needed as we called netG_A directly
+    # output_key = 'fake_B'
+    # if output_key not in output_visuals:
+    #      available_keys = list(output_visuals.keys())
+    #      raise KeyError(f"Could not find '{output_key}' in model output visuals. Available keys: {available_keys}.")
 
-    output_tensor = output_visuals[output_key].squeeze(0).cpu().detach().numpy() # Shape: [2, F, T]
+    # Move the result to CPU, detach, and convert to numpy
+    output_tensor = fake_B.squeeze(0).cpu().detach().numpy() # Shape: [2, F, T]
 
     # 7. Denormalization
     output_tensor_denorm = output_tensor * global_max_abs_val
