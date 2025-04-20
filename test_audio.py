@@ -200,19 +200,6 @@ if __name__ == '__main__':
     num_segments = int(np.ceil(len(y_in) / segment_len_samples))
     print(f"Processing audio in {num_segments} segments...")
 
-    # Check GPU availability based on hardcoded opt.gpu_ids
-    use_gpu = False
-    if opt.gpu_ids != '-1':
-        try:
-            gpu_list = [int(x) for x in opt.gpu_ids.split(',')]
-            if torch.cuda.is_available() and len(gpu_list) > 0:
-                use_gpu = True
-                print(f"Using GPU: {opt.gpu_ids}")
-            else:
-                print("GPU specified but not available or list empty. Using CPU.")
-        except ValueError:
-            print(f"Invalid gpu_ids format: {opt.gpu_ids}. Using CPU.")
-
     for i in tqdm(range(num_segments), desc="Generating Audio"):
         start_sample = i * segment_len_samples
         end_sample = start_sample + segment_len_samples
