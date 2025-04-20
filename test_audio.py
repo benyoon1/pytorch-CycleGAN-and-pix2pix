@@ -132,8 +132,15 @@ def process_audio_segment(segment_audio, model, options, norm_stats): # Renamed 
          input_tensor = input_tensor.to(model.device)
 
     # 5. Run Model (A->B)
-    model.set_input({'A': input_tensor, 'A_paths': ['dummy_path']})
-    model.test() # <--- CHANGE THIS LINE
+    # model.test() already includes torch.no_grad() internally
+
+    # Directly set the required input attribute 'real_A' for A->B generation
+    # Ensure the tensor is on the correct device first
+    model.real_A = input_tensor.to(model.device) # Use model.device which was set during setup
+
+    # We don't need to set model.real_B for A->B inference.
+    # We also don't strictly need image_paths for inference itself.
+    model.test() # Call test() which internally calls forward() using model.real_A
 
     # 6. Get output tensor
     output_visuals = model.get_current_visuals()
