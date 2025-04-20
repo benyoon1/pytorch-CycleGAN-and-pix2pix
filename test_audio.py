@@ -13,8 +13,8 @@ import argparse # Keep argparse just for Namespace object
 # --- Hardcoded Configuration ---
 class HardcodedOptions:
     # --- Paths ---
-    input_audio = './datasets_raw/squier_test.wav'
-    output_audio = './datasets_raw/output.wav'
+    input_audio = './datasets_raw/squier_test_22050.wav'
+    output_audio = './datasets_raw/output2.wav'
     norm_stats_path = './datasets/bass_transfer/norm_stats.json'
     checkpoints_dir = './checkpoints'
     dataroot = './datasets/bass_transfer' # Still needed for some path constructions potentially
