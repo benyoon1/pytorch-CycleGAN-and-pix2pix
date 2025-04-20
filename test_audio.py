@@ -132,10 +132,8 @@ def process_audio_segment(segment_audio, model, options, norm_stats): # Renamed 
          input_tensor = input_tensor.to(model.device)
 
     # 5. Run Model (A->B)
-    with torch.no_grad(): # Essential for inference
-        # Ensure input keys match model.set_input expectations ('A', 'B')
-        model.set_input({'A': input_tensor, 'A_paths': ['dummy_path']})
-        model.forward() # Use forward() for inference
+    model.set_input({'A': input_tensor, 'A_paths': ['dummy_path']})
+    model.test() # <--- CHANGE THIS LINE
 
     # 6. Get output tensor
     output_visuals = model.get_current_visuals()
@@ -213,7 +211,13 @@ if __name__ == '__main__':
              output_segment = process_audio_segment(segment, model, opt, norm_stats)
              output_audio_full = np.concatenate((output_audio_full, output_segment))
         except Exception as e:
-             print(f"\nError processing segment {i}: {e}")
+             import traceback
+             print(f"\nError processing segment {i}:")
+             print(f"  Error Type: {type(e)}")
+             print(f"  Error Details: {e}")
+             print("--- Traceback ---")
+             traceback.print_exc()
+             print("--- End Traceback ---")
              print("Skipping segment.")
              # Optionally pad with silence if skipping:
              # output_audio_full = np.concatenate((output_audio_full, np.zeros_like(segment)))
