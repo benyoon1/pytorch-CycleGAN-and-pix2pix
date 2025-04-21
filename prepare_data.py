@@ -51,20 +51,3 @@ def create_segments(input_dir, output_dir, segment_length, target_sr, normalizat
             print(f"Error processing file {filepath}: {e}")
 
     print(f"Created {segment_count} segments in {output_dir}")
-
-# --- Configuration for Segmentation ---
-SOURCE_DIR_A = 'squier_train_16'
-SOURCE_DIR_B = 'ibanez_train_16'
-SEGMENT_OUTPUT_DIR_A = 'bass_a_segments' # Must match DATA_DIR_A in training script
-SEGMENT_OUTPUT_DIR_B = 'bass_b_segments' # Must match DATA_DIR_B in training script
-
-# Use the same parameters as in the training script
-TARGET_SR = 16000
-SEGMENT_LEN = 16384
-
-# Run segmentation
-print("Creating segments for Bass A...")
-create_segments(SOURCE_DIR_A, SEGMENT_OUTPUT_DIR_A, SEGMENT_LEN, TARGET_SR)
-print("\nCreating segments for Bass B...")
-create_segments(SOURCE_DIR_B, SEGMENT_OUTPUT_DIR_B, SEGMENT_LEN, TARGET_SR)
-print("\nSegmentation finished.")
