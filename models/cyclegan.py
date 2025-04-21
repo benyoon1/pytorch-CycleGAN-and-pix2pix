@@ -456,48 +456,13 @@ if __name__ == "__main__":
         print(f"Epoch {epoch+1}/{NUM_EPOCHS} Summary: Loss_D={avg_loss_D:.4f}, Loss_G={avg_loss_G:.4f} "
               f"(GAN={avg_loss_GAN:.4f}, Cycle={avg_loss_Cyc:.4f}, ID={avg_loss_ID:.4f})")
 
-        # --- Save Checkpoints and Audio Samples ---
+        # --- Save Checkpoints  ---
         if (epoch + 1) % 50 == 0 or epoch == NUM_EPOCHS - 1: # Save every 50 epochs and at the end
             print(f"Saving models at epoch {epoch+1}...")
             torch.save(G_AB.state_dict(), os.path.join(CHECKPOINT_DIR, f'G_AB_epoch_{epoch+1}.pth'))
             torch.save(G_BA.state_dict(), os.path.join(CHECKPOINT_DIR, f'G_BA_epoch_{epoch+1}.pth'))
             torch.save(D_A.state_dict(), os.path.join(CHECKPOINT_DIR, f'D_A_epoch_{epoch+1}.pth'))
             torch.save(D_B.state_dict(), os.path.join(CHECKPOINT_DIR, f'D_B_epoch_{epoch+1}.pth'))
-
-            # Save some audio samples
-            print(f"Generating audio samples for epoch {epoch+1}...")
-            G_AB.eval()
-            G_BA.eval()
-            with torch.no_grad():
-                # Get a fixed batch for consistent comparison (fetch directly to avoid shuffle variation)
-                try:
-                    # Use iterators defined outside the loop to get consistent samples if possible
-                    sample_A = next(iter(dataloader_A)).to(DEVICE)
-                    sample_B = next(iter(dataloader_B)).to(DEVICE)
-                except StopIteration: # If iterator exhausted, reinitialize
-                    print("Reinitializing iterators for sampling.")
-                    iter_A = iter(dataloader_A)
-                    iter_B = iter(dataloader_B)
-                    sample_A = next(iter_A).to(DEVICE)
-                    sample_B = next(iter_B).to(DEVICE)
-
-                # Check sample batch size again
-                if sample_A.size(0) > 0 and sample_B.size(0) > 0:
-                     # Generate conversions and cycles
-                    fake_B_sample = G_AB(sample_A)
-                    fake_A_sample = G_BA(sample_B)
-                    cycled_A_sample = G_BA(fake_B_sample)
-                    cycled_B_sample = G_AB(fake_A_sample)
-
-                    # Save the first audio clip of the batch
-                    sf.write(os.path.join(SAMPLE_DIR, f'epoch{epoch+1}_A_real.wav'), sample_A[0].cpu().squeeze().numpy(), SAMPLE_RATE)
-                    sf.write(os.path.join(SAMPLE_DIR, f'epoch{epoch+1}_B_fake.wav'), fake_B_sample[0].cpu().squeeze().numpy(), SAMPLE_RATE)
-                    sf.write(os.path.join(SAMPLE_DIR, f'epoch{epoch+1}_A_cycled.wav'), cycled_A_sample[0].cpu().squeeze().numpy(), SAMPLE_RATE)
-                    sf.write(os.path.join(SAMPLE_DIR, f'epoch{epoch+1}_B_real.wav'), sample_B[0].cpu().squeeze().numpy(), SAMPLE_RATE)
-                    sf.write(os.path.join(SAMPLE_DIR, f'epoch{epoch+1}_A_fake.wav'), fake_A_sample[0].cpu().squeeze().numpy(), SAMPLE_RATE)
-                    sf.write(os.path.join(SAMPLE_DIR, f'epoch{epoch+1}_B_cycled.wav'), cycled_B_sample[0].cpu().squeeze().numpy(), SAMPLE_RATE)
-                else:
-                     print("Warning: Could not generate samples due to empty sample batch.")
 
             # Set models back to train mode (already done at start of next epoch, but good practice)
             G_AB.train()
