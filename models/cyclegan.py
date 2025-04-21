@@ -255,7 +255,7 @@ if __name__ == "__main__":
     # --- Configuration ---
     SAMPLE_RATE = 16000
     SEGMENT_LENGTH = 16384  # ~1 second at 16kHz
-    BATCH_SIZE = 4        # Keep low due to memory usage with raw audio
+    BATCH_SIZE = 4
     NUM_EPOCHS = 50
     LAMBDA_CYCLE = 10     # Weight for cycle consistency loss
     LAMBDA_ID = 0.5 * LAMBDA_CYCLE # Weight for identity loss (0.1 to 0.5 of LAMBDA_CYCLE is common)

@@ -5,6 +5,9 @@ import soundfile as sf
 from tqdm.auto import tqdm
 
 def create_segments(input_dir, output_dir, segment_length, target_sr, normalization='peak'):
+    """
+    Splits audio files in the input directory into segments of specified length and saves them in the output directory.
+    """
     os.makedirs(output_dir, exist_ok=True)
     all_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) if f.lower().endswith('.wav')]
     segment_count = 0
@@ -21,8 +24,7 @@ def create_segments(input_dir, output_dir, segment_length, target_sr, normalizat
                 if peak > 1e-6: # Avoid division by zero for silence
                     audio = audio / peak * 0.98 # Normalize to slightly below 1.0
             elif normalization == 'rms':
-                 # Add RMS normalization if desired
-                 pass # Implement RMS normalization here
+                 pass
 
 
             # Calculate number of segments
@@ -33,10 +35,8 @@ def create_segments(input_dir, output_dir, segment_length, target_sr, normalizat
                 end = start + segment_length
                 segment = audio[start:end]
 
-                # Optional: Add check for silence/low energy - skip quiet segments
                 rms = np.sqrt(np.mean(segment**2))
-                if rms < 0.01: # Adjust threshold as needed
-                   # print(f"Skipping silent segment {segment_count} from {filepath}")
+                if rms < 0.01:
                    continue
 
                 # Save segment as npy (faster loading) or wav

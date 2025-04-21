@@ -8,8 +8,7 @@ from tqdm.auto import tqdm
 import random
 from cyclegan import Generator
 
-
-# --- Configuration (MUST match training configuration!) ---
+# --- Configs ---
 SAMPLE_RATE = 16000
 SEGMENT_LENGTH = 16384
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -18,7 +17,6 @@ GENERATOR_N_RESIDUAL_BLOCKS = 6
 
 
 # --- Inference Function ---
-# (Synthesize_audio function remains the same as your previous version)
 def synthesize_audio(input_wav_path, output_wav_path, generator_checkpoint_path):
     """
     Loads a generator model, processes an input WAV file segment by segment,
@@ -30,7 +28,6 @@ def synthesize_audio(input_wav_path, output_wav_path, generator_checkpoint_path)
 
     # --- Load Model ---
     print(f"Loading generator from {generator_checkpoint_path}")
-    # Instantiate generator using the CORRECTED definition above
     G_AB = Generator(base_n_filters=GENERATOR_BASE_N_FILTERS,
                      n_residual_blocks=GENERATOR_N_RESIDUAL_BLOCKS).to(DEVICE)
     try:
@@ -47,7 +44,7 @@ def synthesize_audio(input_wav_path, output_wav_path, generator_checkpoint_path)
         print(f"\n*** Error: Checkpoint file not found at {generator_checkpoint_path} ***\n")
         raise
 
-    G_AB.eval() # Set model to evaluation mode
+    G_AB.eval()
 
     # --- Load and Prepare Input Audio ---
     print(f"Loading input audio: {input_wav_path}")
@@ -123,31 +120,3 @@ def synthesize_audio(input_wav_path, output_wav_path, generator_checkpoint_path)
         raise
 
     print("Inference complete.")
-
-
-# --- Main Execution Block ---
-if __name__ == "__main__":
-    print("Starting Bass Timbre Transfer Inference...")
-
-    # ======================================================================
-    # == EDIT THESE VARIABLES ==
-    # ======================================================================
-    INPUT_WAV_PATH = './test/squier_test.wav'
-    OUTPUT_WAV_PATH = 'output/converted_bass_b16.wav'
-    GENERATOR_CHECKPOINT_PATH = 'output/bass_cyclegan/checkpoints/G_AB_epoch_50.pth'
-    # ======================================================================
-
-    # Basic path validation
-    if not os.path.isfile(INPUT_WAV_PATH):
-       print(f"ERROR: Input file not found at '{INPUT_WAV_PATH}'")
-       exit()
-    if not os.path.isfile(GENERATOR_CHECKPOINT_PATH):
-        print(f"ERROR: Generator checkpoint not found at '{GENERATOR_CHECKPOINT_PATH}'")
-        exit()
-
-    # Run the synthesis process
-    synthesize_audio(
-        input_wav_path=INPUT_WAV_PATH,
-        output_wav_path=OUTPUT_WAV_PATH,
-        generator_checkpoint_path=GENERATOR_CHECKPOINT_PATH
-    )
