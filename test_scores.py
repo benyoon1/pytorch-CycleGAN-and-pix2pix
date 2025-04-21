@@ -1,22 +1,8 @@
-from frechet_audio_distance import FrechetAudioDistance
 import torch
 import os
 import numpy as np
 import librosa
 from scipy.special import kl_div
-
-# ref_dir = "ibanez_test_16"
-# gen_dir = "output"
-# ref_dir = "squier_train_16"
-# gen_dir = "ibanez_train_16"
-
-# FAD score
-# fad = FrechetAudioDistance(
-#     sample_rate=16000,
-#     use_pca=False
-# )
-# fad_score = fad.score(ref_dir, gen_dir)
-# print(f"FAD score: {fad_score:.4f}")
 
 def calculate_kl_divergence(dir1, dir2, sample_rate=16000):
     audio_files1 = [os.path.join(dir1, f) for f in os.listdir(dir1) if f.endswith(('.wav', '.mp3'))]
@@ -54,9 +40,3 @@ def calculate_kl_divergence(dir1, dir2, sample_rate=16000):
     kl = np.sum(kl_div(p, q))
     
     return kl
-
-# try:
-#     kl_score = calculate_kl_divergence(ref_dir, gen_dir)
-#     print(f"KL Divergence score: {kl_score:.4f}")
-# except Exception as e:
-#     print(f"Error calculating KL Divergence: {e}")
